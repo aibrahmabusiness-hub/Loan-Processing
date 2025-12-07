@@ -16,6 +16,7 @@ export const Dashboard: React.FC = () => {
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [pieData, setPieData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
@@ -25,43 +26,51 @@ export const Dashboard: React.FC = () => {
   const fetchStats = async () => {
     if (!profile) return;
 
-    let inspectionQuery = supabase.from('field_inspection_reports').select('*');
-    let payoutQuery = supabase.from('payout_reports').select('*');
+    try {
+      let inspectionQuery = supabase.from('field_inspection_reports').select('*');
+      let payoutQuery = supabase.from('payout_reports').select('*');
 
-    // Field Agents only see their own data
-    if (!isAdmin) {
-      inspectionQuery = inspectionQuery.eq('created_by_user_id', profile.user_id);
-      payoutQuery = payoutQuery.eq('created_by_user_id', profile.user_id);
+      // Field Agents only see their own data
+      if (!isAdmin) {
+        inspectionQuery = inspectionQuery.eq('created_by_user_id', profile.user_id);
+        payoutQuery = payoutQuery.eq('created_by_user_id', profile.user_id);
+      }
+
+      const [inspectionRes, payoutRes] = await Promise.all([inspectionQuery, payoutQuery]);
+
+      const inspections = inspectionRes.data || [];
+      const payouts = payoutRes.data || [];
+
+      const totalVolume = inspections.reduce((sum, item) => sum + (Number(item.loan_amount) || 0), 0);
+      const pending = payouts.filter(p => p.payment_status === 'Pending').length;
+      const paid = payouts.filter(p => p.payment_status === 'Paid').length;
+
+      setStats({
+        inspections: inspections.length,
+        volume: totalVolume,
+        paid,
+        pending
+      });
+
+      // Prepare chart data (Region breakdown for inspections)
+      const regionMap: Record<string, number> = {};
+      inspections.forEach(i => {
+        const region = i.region || 'Unknown';
+        regionMap[region] = (regionMap[region] || 0) + 1;
+      });
+
+      const processedChartData = Object.keys(regionMap).map(key => ({ name: key, count: regionMap[key] }));
+      setChartData(processedChartData.length > 0 ? processedChartData : [{ name: 'No Data', count: 0 }]);
+      
+      setPieData([
+        { name: 'Paid', value: paid },
+        { name: 'Pending', value: pending }
+      ]);
+    } catch (error) {
+      console.error("Error fetching dashboard stats:", error);
+    } finally {
+      setLoading(false);
     }
-
-    const [inspectionRes, payoutRes] = await Promise.all([inspectionQuery, payoutQuery]);
-
-    const inspections = inspectionRes.data || [];
-    const payouts = payoutRes.data || [];
-
-    const totalVolume = inspections.reduce((sum, item) => sum + (Number(item.loan_amount) || 0), 0);
-    const pending = payouts.filter(p => p.payment_status === 'Pending').length;
-    const paid = payouts.filter(p => p.payment_status === 'Paid').length;
-
-    setStats({
-      inspections: inspections.length,
-      volume: totalVolume,
-      paid,
-      pending
-    });
-
-    // Prepare chart data (Region breakdown for inspections)
-    const regionMap: Record<string, number> = {};
-    inspections.forEach(i => {
-      const region = i.region || 'Unknown';
-      regionMap[region] = (regionMap[region] || 0) + 1;
-    });
-
-    setChartData(Object.keys(regionMap).map(key => ({ name: key, count: regionMap[key] })));
-    setPieData([
-      { name: 'Paid', value: paid },
-      { name: 'Pending', value: pending }
-    ]);
   };
 
   const StatCard = ({ title, value, icon: Icon, color }: any) => (
@@ -75,6 +84,8 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
+
+  if (loading) return <div className="p-8">Loading dashboard...</div>;
 
   return (
     <div className="space-y-6">
@@ -117,7 +128,8 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl border shadow-sm flex flex-col">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Inspections by Region</h3>
-          <div className="h-64 w-full" style={{ minHeight: '256px' }}>
+          {/* Explicit height wrapper to prevent re-charts width(-1) error */}
+          <div className="h-[300px] w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -134,7 +146,8 @@ export const Dashboard: React.FC = () => {
 
         <div className="bg-white p-6 rounded-xl border shadow-sm flex flex-col">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Payout Status Distribution</h3>
-          <div className="h-64 w-full flex items-center justify-center" style={{ minHeight: '256px' }}>
+          {/* Explicit height wrapper to prevent re-charts width(-1) error */}
+          <div className="h-[300px] w-full min-h-[300px] flex items-center justify-center">
              <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

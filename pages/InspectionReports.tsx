@@ -20,7 +20,7 @@ export const InspectionReports: React.FC = () => {
 
   // Form State
   const initialFormState: Partial<FieldInspectionReport> = {
-    date: new Date().toLocaleDateString('en-CA'), // Returns YYYY-MM-DD in most locales, safe fallback
+    date: new Date().toISOString().split('T')[0], // Reliable YYYY-MM-DD format
     loan_ac_no: '',
     customer_name: '',
     loan_amount: 0,
@@ -64,9 +64,15 @@ export const InspectionReports: React.FC = () => {
     e.preventDefault();
     if (!profile) return;
 
+    // Create a copy of the form data
     const payload = { ...formData, created_by_user_id: profile.user_id };
     
-    // Remove ID if creating new, keep if editing
+    // Ensure numeric values are numbers
+    payload.loan_amount = Number(payload.loan_amount);
+
+    // Remove ID if creating new to let DB handle UUID generation
+    // If editing, we need the ID for the .eq() clause, but we don't necessarily need to send it in the body for update, 
+    // though Supabase ignores it if it matches.
     if (!isEditing) {
         delete (payload as any).id;
         delete (payload as any).created_at;
@@ -82,8 +88,9 @@ export const InspectionReports: React.FC = () => {
       setFormData(initialFormState);
       fetchReports();
     } catch (err: any) {
-      console.error(err);
-      alert('Error saving report: ' + (err.message || 'Unknown error'));
+      console.error('Supabase Error:', err);
+      // Detailed error alerting
+      alert('Error saving report:\n' + (err.message || JSON.stringify(err)));
     }
   };
 

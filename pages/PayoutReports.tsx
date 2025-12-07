@@ -13,8 +13,9 @@ export const PayoutReports: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Default to current month YYYY-MM
   const initialFormState: Partial<PayoutReport> = {
-    month: new Date().toISOString().slice(0, 7), // YYYY-MM
+    month: new Date().toISOString().slice(0, 7), 
     financier: '',
     loan_amount: 0,
     payout_percentage: 0,
@@ -96,7 +97,7 @@ export const PayoutReports: React.FC = () => {
       fetchReports();
     } catch (err: any) {
       console.error(err);
-      alert('Error saving report: ' + (err.message || 'Unknown error'));
+      alert('Error saving report:\n' + (err.message || JSON.stringify(err)));
     }
   };
 
